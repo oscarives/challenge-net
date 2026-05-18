@@ -14,5 +14,5 @@ frontend/dist/
 .DS_Store
 Thumbs.db
 
-# Docs locales de evidencias (no subir)
-evidencias/**/*.md
+# Evidencias locales (no subir)
+evidencias/
