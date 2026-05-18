@@ -2,6 +2,12 @@ import axios from 'axios'
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '')
 
+export function getApiErrorMessage(error, fallback = 'Error al procesar la solicitud')
+{
+  const data = error?.response?.data
+  return data?.mensaje || data?.message || fallback
+}
+
 export const turnosApi = {
   getAll:           ()          => axios.get(`${BASE_URL}/Turnos`),
   getById:          (id)        => axios.get(`${BASE_URL}/Turnos/${id}`),
