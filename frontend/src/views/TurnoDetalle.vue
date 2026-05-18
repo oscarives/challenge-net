@@ -31,7 +31,7 @@
 </template>
 
 <script>
-import { turnosApi } from '../services/api'
+import { getApiErrorMessage, turnosApi } from '../services/api'
 
 export default {
   name: 'TurnoDetalle',
@@ -43,31 +43,44 @@ export default {
     }
   },
   async mounted() {
-    try {
-      const res = await turnosApi.getById(this.$route.params.id)
-      this.turno = res.data
-      this.nuevoEstado = this.turno.estado
-    } catch {
-      alert('Error al procesar la solicitud')
-    }
+    await this.cargarTurno()
   },
   methods: {
+    async cargarTurno() {
+      try {
+        const res = await turnosApi.getById(this.$route.params.id)
+        this.turno = res.data
+        this.nuevoEstado = this.turno.estado
+      } catch (error) {
+        alert(getApiErrorMessage(error))
+      }
+    },
     formatFecha(fecha) {
       return new Date(fecha).toLocaleString('es-AR')
     },
     async cambiarEstado() {
       try {
-        const res = await turnosApi.actualizarEstado(this.turno.id, { estado: this.nuevoEstado })
-        this.turno = res.data
-      } catch {
-        alert('Error al procesar la solicitud')
+        await turnosApi.actualizarEstado(this.turno.id, { estado: this.nuevoEstado })
+        await this.cargarTurno()
+      } catch (error) {
+        alert(getApiErrorMessage(error))
       }
     },
     async cancelar() {
-      await turnosApi.cancelar(this.turno.id)
+      try {
+        await turnosApi.cancelar(this.turno.id)
+        await this.cargarTurno()
+      } catch (error) {
+        alert(getApiErrorMessage(error, 'No se pudo cancelar el turno.'))
+      }
     },
     async marcarAusencia() {
-      await turnosApi.marcarAusencia(this.turno.id)
+      try {
+        await turnosApi.marcarAusencia(this.turno.id)
+        await this.cargarTurno()
+      } catch (error) {
+        alert(getApiErrorMessage(error, 'No se pudo marcar la ausencia.'))
+      }
     }
   }
 }

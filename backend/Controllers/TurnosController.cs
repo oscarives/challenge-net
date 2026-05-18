@@ -66,13 +66,19 @@ public class TurnosController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
     }
 
-    [HttpGet("cancelar/{id}")]
+    [HttpPut("{id}/cancelar")]
     public async Task<IActionResult> CancelarTurno(int id)
     {
         var turno = await _context.Turnos.FindAsync(id);
         if (turno == null) return NotFound();
 
-        if (turno.FechaHora - DateTime.Now < TimeSpan.FromHours(23))
+        if (turno.Estado == EstadoTurno.Cancelado)
+            return BadRequest(new { mensaje = "El turno ya se encuentra cancelado." });
+
+        if (turno.Estado == EstadoTurno.Atendido || turno.Estado == EstadoTurno.NoShow)
+            return BadRequest(new { mensaje = "Solo se pueden cancelar turnos en estado Pendiente o Confirmado." });
+
+        if (turno.FechaHora - DateTime.Now < TimeSpan.FromHours(24))
             return BadRequest(new { mensaje = "No se puede cancelar con menos de 24 horas de anticipación." });
 
         turno.Estado = EstadoTurno.Cancelado;
