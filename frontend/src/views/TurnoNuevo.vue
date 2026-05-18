@@ -34,7 +34,7 @@
 </template>
 
 <script>
-import { turnosApi, pacientesApi, medicosApi } from '../services/api'
+import { getApiErrorMessage, turnosApi, pacientesApi, medicosApi } from '../services/api'
 
 export default {
   name: 'TurnoNuevo',
@@ -55,8 +55,8 @@ export default {
       const [pRes, mRes] = await Promise.all([pacientesApi.getAll(), medicosApi.getAll()])
       this.pacientes = pRes.data
       this.medicos = mRes.data
-    } catch {
-      alert('Error al procesar la solicitud')
+    } catch (error) {
+      alert(getApiErrorMessage(error))
     }
   },
   methods: {
@@ -69,8 +69,8 @@ export default {
           motivo: this.form.motivo
         })
         this.$router.push('/turnos')
-      } catch {
-        alert('Error al procesar la solicitud')
+      } catch (error) {
+        alert(getApiErrorMessage(error))
       }
     }
   }
