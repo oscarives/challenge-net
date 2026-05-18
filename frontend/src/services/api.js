@@ -1,28 +1,34 @@
 import axios from 'axios'
 
-const BASE_URL = 'http://devserver01.intuit.ar/test/api'
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '')
+
+export function getApiErrorMessage(error, fallback = 'Error al procesar la solicitud')
+{
+  const data = error?.response?.data
+  return data?.mensaje || data?.message || fallback
+}
 
 export const turnosApi = {
-  getAll:           ()          => axios.get(`${BASE_URL}/turnos`),
-  getById:          (id)        => axios.get(`${BASE_URL}/turnos/${id}`),
-  create:           (data)      => axios.post(`${BASE_URL}/turnos`, data),
-  cancelar:         (id)        => axios.get(`${BASE_URL}/turnos/cancelar/${id}`),
-  marcarAusencia:   (id)        => axios.post(`${BASE_URL}/turnos/${id}/ausencia`),
-  actualizarEstado: (id, data)  => axios.put(`${BASE_URL}/turnos/${id}/estado`, data)
+  getAll:           ()          => axios.get(`${BASE_URL}/Turnos`),
+  getById:          (id)        => axios.get(`${BASE_URL}/Turnos/${id}`),
+  create:           (data)      => axios.post(`${BASE_URL}/Turnos`, data),
+  cancelar:         (id)        => axios.put(`${BASE_URL}/Turnos/${id}/cancelar`),
+  marcarAusencia:   (id)        => axios.post(`${BASE_URL}/Turnos/${id}/ausencia`),
+  actualizarEstado: (id, data)  => axios.put(`${BASE_URL}/Turnos/${id}/estado`, data)
 }
 
 export const pacientesApi = {
-  getAll:  ()          => axios.get(`${BASE_URL}/pacientes`),
-  getById: (id)        => axios.get(`${BASE_URL}/pacientes/${id}`),
-  create:  (data)      => axios.post(`${BASE_URL}/pacientes`, data),
-  update:  (id, data)  => axios.put(`${BASE_URL}/pacientes/${id}`, data),
-  delete:  (id)        => axios.delete(`${BASE_URL}/pacientes/${id}`)
+  getAll:  ()          => axios.get(`${BASE_URL}/Pacientes`),
+  getById: (id)        => axios.get(`${BASE_URL}/Pacientes/${id}`),
+  create:  (data)      => axios.post(`${BASE_URL}/Pacientes`, data),
+  update:  (id, data)  => axios.put(`${BASE_URL}/Pacientes/${id}`, data),
+  delete:  (id)        => axios.delete(`${BASE_URL}/Pacientes/${id}`)
 }
 
 export const medicosApi = {
-  getAll: () => axios.get(`${BASE_URL}/medicos`)
+  getAll: () => axios.get(`${BASE_URL}/Medicos`)
 }
 
 export const sucursalesApi = {
-  getAll: () => axios.get(`${BASE_URL}/sucursales`)
+  getAll: () => axios.get(`${BASE_URL}/Sucursales`)
 }

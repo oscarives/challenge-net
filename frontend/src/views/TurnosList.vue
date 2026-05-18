@@ -37,7 +37,7 @@
 </template>
 
 <script>
-import { turnosApi } from '../services/api'
+import { getApiErrorMessage, turnosApi } from '../services/api'
 
 export default {
   name: 'TurnosList',
@@ -47,19 +47,27 @@ export default {
     }
   },
   async mounted() {
-    try {
-      const res = await turnosApi.getAll()
-      this.turnos = res.data
-    } catch {
-      alert('Error al procesar la solicitud')
-    }
+    await this.cargarTurnos()
   },
   methods: {
+    async cargarTurnos() {
+      try {
+        const res = await turnosApi.getAll()
+        this.turnos = res.data
+      } catch (error) {
+        alert(getApiErrorMessage(error))
+      }
+    },
     formatFecha(fecha) {
       return new Date(fecha).toLocaleString('es-AR')
     },
     async cancelar(id) {
-      await turnosApi.cancelar(id)
+      try {
+        await turnosApi.cancelar(id)
+        await this.cargarTurnos()
+      } catch (error) {
+        alert(getApiErrorMessage(error, 'No se pudo cancelar el turno.'))
+      }
     }
   }
 }
