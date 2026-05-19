@@ -66,6 +66,8 @@ public class TurnosController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CrearTurno([FromBody] Turno turno)
     {
+        turno.FechaHora = turno.FechaHora.ToUtcNormalized();
+
         var paciente = await _context.Pacientes.FindAsync(turno.PacienteId);
         if (paciente == null)
             return NotFound(new { mensaje = "Paciente no encontrado." });

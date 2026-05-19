@@ -187,6 +187,47 @@ public class TurnosControllerTests
         Assert.Contains("cancelado o con ausencia", GetMensaje(badInvalid.Value));
     }
 
+    [Fact]
+    public async Task CrearTurno_NormalizesFechaHoraToUtc()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        await using var context = new AppDbContext(options);
+        context.Medicos.Add(new Medico { Id = 7001, NombreCompleto = "Dr TZ", Especialidad = "Clinica", SucursalId = 1 });
+        context.Pacientes.Add(new Paciente
+        {
+            Id = 7002,
+            NombreCompleto = "Paciente TZ",
+            DNI = "777",
+            Email = "tz@tz.com",
+            Telefono = "777",
+            createdAt = DateTime.UtcNow,
+            isActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var fechaUnspecified = new DateTime(2026, 6, 1, 10, 0, 0, DateTimeKind.Unspecified);
+        var controller = new TurnosController(
+            context,
+            new NoOpNoShowPenaltyEvaluator(),
+            Options.Create(new NoShowPenaltySettings { MedidaPeriodo = "Mes", Periodo = 1, BloqueoDias = 30 }));
+
+        var result = await controller.CrearTurno(new Turno
+        {
+            PacienteId = 7002,
+            MedicoId = 7001,
+            FechaHora = fechaUnspecified,
+            Motivo = "tz-check"
+        });
+
+        Assert.IsType<CreatedAtActionResult>(result);
+        var created = await context.Turnos.OrderByDescending(t => t.Id).FirstAsync();
+        Assert.Equal(DateTimeKind.Utc, created.FechaHora.Kind);
+    }
+
     private static string GetMensaje(object? value)
     {
         if (value == null)
