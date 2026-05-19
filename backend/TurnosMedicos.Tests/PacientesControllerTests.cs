@@ -43,4 +43,57 @@ public class PacientesControllerTests
         Assert.True(payload.BloqueadoVigente);
         Assert.NotNull(payload.BloqueoHastaUtc);
     }
+
+    [Fact]
+    public async Task Create_ReturnsBadRequest_WhenInputIsInvalid()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        await using var context = new AppDbContext(options);
+        var controller = new PacientesController(
+            context,
+            Options.Create(new NoShowPenaltySettings { BloqueoDias = 30, MedidaPeriodo = "Mes", Periodo = 1 }));
+
+        var result = await controller.Create(new UpsertPacienteRequest
+        {
+            NombreCompleto = "A",
+            DNI = "12",
+            Email = "invalido",
+            Telefono = "1"
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Create_SetsSystemFields_AndDoesNotTakeSensitiveInput()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        await using var context = new AppDbContext(options);
+        var controller = new PacientesController(
+            context,
+            Options.Create(new NoShowPenaltySettings { BloqueoDias = 30, MedidaPeriodo = "Mes", Periodo = 1 }));
+
+        var result = await controller.Create(new UpsertPacienteRequest
+        {
+            NombreCompleto = "Paciente Nuevo",
+            DNI = "12345678",
+            Email = "nuevo@x.com",
+            Telefono = "1144556677"
+        });
+
+        var created = Assert.IsType<CreatedAtActionResult>(result);
+        var payload = Assert.IsType<PacienteResponse>(created.Value);
+
+        Assert.True(payload.IsActive);
+        Assert.Null(payload.FechaBloqueo);
+        Assert.True(payload.CreatedAt > DateTime.UtcNow.AddMinutes(-1));
+    }
 }
