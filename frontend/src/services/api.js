@@ -1,8 +1,6 @@
 import axios from 'axios'
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '')
-const parsedBloqueoDias = Number.parseInt(import.meta.env.VITE_NOSHOW_BLOQUEO_DIAS || '30', 10)
-const BLOQUEO_DIAS = Number.isNaN(parsedBloqueoDias) || parsedBloqueoDias < 0 ? 30 : parsedBloqueoDias
 
 export function getApiErrorMessage(error, fallback = 'Error al procesar la solicitud')
 {
@@ -11,17 +9,7 @@ export function getApiErrorMessage(error, fallback = 'Error al procesar la solic
 }
 
 export function isPacienteBloqueadoByFecha(paciente) {
-  if (typeof paciente?.bloqueadoVigente === 'boolean') {
-    return paciente.bloqueadoVigente
-  }
-
-  if (!paciente?.fechaBloqueo) return false
-
-  const fechaBloqueo = new Date(paciente.fechaBloqueo)
-  if (Number.isNaN(fechaBloqueo.getTime())) return false
-
-  const bloqueoHastaMs = fechaBloqueo.getTime() + BLOQUEO_DIAS * 24 * 60 * 60 * 1000
-  return bloqueoHastaMs > Date.now()
+  return paciente?.bloqueadoVigente === true
 }
 
 export const turnosApi = {
