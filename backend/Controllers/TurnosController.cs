@@ -162,6 +162,26 @@ public class TurnosController : ControllerBase
         return Ok(turno);
     }
 
+    [HttpPut("{id}/atender")]
+    public async Task<IActionResult> MarcarAtendido(int id)
+    {
+        var turno = await _context.Turnos.FindAsync(id);
+        if (turno == null) return NotFound();
+
+        if (turno.Estado == EstadoTurno.Atendido)
+            return BadRequest(new { mensaje = "El turno ya se encuentra atendido." });
+
+        if (turno.Estado == EstadoTurno.Cancelado || turno.Estado == EstadoTurno.NoShow)
+            return BadRequest(new { mensaje = "No se puede marcar como atendido un turno cancelado o con ausencia." });
+
+        if (turno.Estado != EstadoTurno.Pendiente && turno.Estado != EstadoTurno.Confirmado)
+            return BadRequest(new { mensaje = "Solo se pueden atender turnos en estado Pendiente o Confirmado." });
+
+        turno.Estado = EstadoTurno.Atendido;
+        await _context.SaveChangesAsync();
+        return Ok(turno);
+    }
+
     [HttpPut("{id}/estado")]
     public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoRequest request)
     {
