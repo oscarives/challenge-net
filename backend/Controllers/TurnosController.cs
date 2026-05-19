@@ -114,7 +114,10 @@ public class TurnosController : ControllerBase
         if (turno.Estado == EstadoTurno.Atendido || turno.Estado == EstadoTurno.NoShow)
             return BadRequest(new { mensaje = "Solo se pueden cancelar turnos en estado Pendiente o Confirmado." });
 
-        if (turno.FechaHora - DateTime.Now < TimeSpan.FromHours(24))
+        if (turno.FechaHora.IsExpired())
+            return BadRequest(new { mensaje = "No se puede cancelar un turno ya vencido." });
+
+        if (turno.FechaHora.IsWithinCancellationWindow())
         {
             turno.Estado = EstadoTurno.NoShow;
             turno.AusenciaPenalizada = false;
