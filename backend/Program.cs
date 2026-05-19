@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using TurnosMedicos.Data;
 using TurnosMedicos.Services;
 
@@ -35,15 +37,32 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-    try
+    var historyRepository = db.GetService<IHistoryRepository>();
+    var dbConnection = db.Database.GetDbConnection();
+    dbConnection.Open();
+
+    var hasLegacySchema =
+        TableExists(dbConnection, "Pacientes") &&
+        TableExists(dbConnection, "Turnos") &&
+        TableExists(dbConnection, "Medicos") &&
+        TableExists(dbConnection, "Sucursales");
+
+    if (hasLegacySchema && !historyRepository.Exists())
     {
-        db.Database.ExecuteSqlRaw("ALTER TABLE Turnos ADD COLUMN AusenciaPenalizada INTEGER NOT NULL DEFAULT 0;");
+        db.Database.ExecuteSqlRaw(historyRepository.GetCreateScript());
+        var efVersion = typeof(DbContext).Assembly.GetName().Version?.ToString() ?? "9.0.0";
+
+        foreach (var migrationId in db.Database.GetMigrations())
+        {
+            db.Database.ExecuteSqlRaw(
+                "INSERT OR IGNORE INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1});",
+                migrationId,
+                efVersion);
+        }
     }
-    catch (Exception ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
-    {
-        // Column already exists in databases that were updated previously.
-    }
+
+    db.Database.Migrate();
+    dbConnection.Close();
 }
 
 app.UseSwagger();
@@ -52,3 +71,16 @@ app.UseSwaggerUI();
 app.UseCors();
 app.MapControllers();
 app.Run();
+
+static bool TableExists(System.Data.Common.DbConnection connection, string tableName)
+{
+    using var cmd = connection.CreateCommand();
+    cmd.CommandText = "SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name = @name;";
+    var parameter = cmd.CreateParameter();
+    parameter.ParameterName = "@name";
+    parameter.Value = tableName;
+    cmd.Parameters.Add(parameter);
+
+    var result = cmd.ExecuteScalar();
+    return Convert.ToInt32(result) > 0;
+}
