@@ -2,7 +2,7 @@ namespace TurnosMedicos.Helpers;
 
 public static class DateTimeExtensions
 {
-    private static DateTime NormalizeToUtc(DateTime value)
+    public static DateTime ToUtcNormalized(this DateTime value)
     {
         return value.Kind switch
         {
@@ -14,7 +14,7 @@ public static class DateTimeExtensions
 
     public static double HoursUntil(this DateTime fechaTurno)
     {
-        var turnoUtc = NormalizeToUtc(fechaTurno);
+        var turnoUtc = fechaTurno.ToUtcNormalized();
         return (turnoUtc - DateTime.UtcNow).TotalHours;
     }
 

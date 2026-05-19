@@ -62,10 +62,12 @@ export default {
   methods: {
     async guardar() {
       try {
+        const fechaUtcIso = new Date(this.form.fechaHora).toISOString()
+
         await turnosApi.create({
           pacienteId: Number(this.form.pacienteId),
           medicoId: Number(this.form.medicoId),
-          fechaHora: this.form.fechaHora,
+          fechaHora: fechaUtcIso,
           motivo: this.form.motivo
         })
         this.$router.push('/turnos')
