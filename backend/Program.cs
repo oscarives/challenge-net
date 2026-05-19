@@ -119,8 +119,10 @@ static bool TableHasColumns(System.Data.Common.DbConnection connection, string t
 
 static bool IsLegacySchemaCompatible(System.Data.Common.DbConnection connection)
 {
+    // Flexibilidad: no exigir columnas legadas removidas (Bloqueado/NoShowCount),
+    // pero sí exigir las columnas activas requeridas por la versión actual.
     return
-        TableHasColumns(connection, "Pacientes", "Id", "NombreCompleto", "DNI", "Email", "Telefono", "FechaBloqueo", "createdAt", "isActive", "Bloqueado", "NoShowCount") &&
+        TableHasColumns(connection, "Pacientes", "Id", "NombreCompleto", "DNI", "Email", "Telefono", "FechaBloqueo", "createdAt", "isActive") &&
         TableHasColumns(connection, "Turnos", "Id", "PacienteId", "MedicoId", "FechaHora", "Estado", "FechaCreacion", "Motivo", "AusenciaPenalizada") &&
         TableHasColumns(connection, "Medicos", "Id", "NombreCompleto", "Especialidad", "SucursalId") &&
         TableHasColumns(connection, "Sucursales", "Id", "Nombre", "Direccion");
