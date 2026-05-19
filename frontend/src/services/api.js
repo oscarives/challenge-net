@@ -11,6 +11,10 @@ export function getApiErrorMessage(error, fallback = 'Error al procesar la solic
 }
 
 export function isPacienteBloqueadoByFecha(paciente) {
+  if (typeof paciente?.bloqueadoVigente === 'boolean') {
+    return paciente.bloqueadoVigente
+  }
+
   if (!paciente?.fechaBloqueo) return false
 
   const fechaBloqueo = new Date(paciente.fechaBloqueo)

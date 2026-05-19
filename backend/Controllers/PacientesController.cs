@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TurnosMedicos.Data;
 using TurnosMedicos.Models;
+using TurnosMedicos.Services;
 
 namespace TurnosMedicos.Controllers;
 
@@ -10,17 +12,20 @@ namespace TurnosMedicos.Controllers;
 public class PacientesController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly NoShowPenaltySettings _noShowPenaltySettings;
 
-    public PacientesController(AppDbContext context)
+    public PacientesController(AppDbContext context, IOptions<NoShowPenaltySettings> noShowPenaltySettings)
     {
         _context = context;
+        _noShowPenaltySettings = NoShowPenaltySettings.WithDefaults(noShowPenaltySettings.Value);
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
         var pacientes = await _context.Pacientes.ToListAsync();
-        return Ok(pacientes);
+        var now = DateTime.UtcNow;
+        return Ok(pacientes.Select(p => ToResponse(p, now)));
     }
 
     [HttpGet("{id}")]
@@ -28,7 +33,8 @@ public class PacientesController : ControllerBase
     {
         var paciente = await _context.Pacientes.FindAsync(id);
         if (paciente == null) return NotFound();
-        return Ok(paciente);
+
+        return Ok(ToResponse(paciente, DateTime.UtcNow));
     }
 
     [HttpPost]
@@ -38,7 +44,7 @@ public class PacientesController : ControllerBase
         paciente.isActive = true;
         _context.Pacientes.Add(paciente);
         await _context.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetById), new { id = paciente.Id }, paciente);
+        return CreatedAtAction(nameof(GetById), new { id = paciente.Id }, ToResponse(paciente, DateTime.UtcNow));
     }
 
     [HttpPut("{id}")]
@@ -53,7 +59,7 @@ public class PacientesController : ControllerBase
         existing.Telefono = paciente.Telefono;
 
         await _context.SaveChangesAsync();
-        return Ok(existing);
+        return Ok(ToResponse(existing, DateTime.UtcNow));
     }
 
     [HttpDelete("{id}")]
@@ -66,4 +72,38 @@ public class PacientesController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+    private PacienteResponse ToResponse(Paciente paciente, DateTime nowUtc)
+    {
+        var bloqueoHastaUtc = paciente.FechaBloqueo?.AddDays(_noShowPenaltySettings.BloqueoDias!.Value);
+        var bloqueadoVigente = bloqueoHastaUtc.HasValue && bloqueoHastaUtc.Value > nowUtc;
+
+        return new PacienteResponse
+        {
+            Id = paciente.Id,
+            NombreCompleto = paciente.NombreCompleto,
+            DNI = paciente.DNI,
+            Email = paciente.Email,
+            Telefono = paciente.Telefono,
+            FechaBloqueo = paciente.FechaBloqueo,
+            CreatedAt = paciente.createdAt,
+            IsActive = paciente.isActive,
+            BloqueadoVigente = bloqueadoVigente,
+            BloqueoHastaUtc = bloqueadoVigente ? bloqueoHastaUtc : null
+        };
+    }
+}
+
+public class PacienteResponse
+{
+    public int Id { get; set; }
+    public string NombreCompleto { get; set; } = string.Empty;
+    public string DNI { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Telefono { get; set; } = string.Empty;
+    public DateTime? FechaBloqueo { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public bool IsActive { get; set; }
+    public bool BloqueadoVigente { get; set; }
+    public DateTime? BloqueoHastaUtc { get; set; }
 }
