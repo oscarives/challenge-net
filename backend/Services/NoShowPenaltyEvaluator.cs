@@ -50,8 +50,6 @@ public class NoShowPenaltyEvaluator : INoShowPenaltyEvaluator
         if (!bloqueoVigente)
             paciente.FechaBloqueo = now;
 
-        paciente.Bloqueado = true;
-
         await _context.SaveChangesAsync();
     }
 }
