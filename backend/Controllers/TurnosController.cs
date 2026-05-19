@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TurnosMedicos.Data;
 using TurnosMedicos.Helpers;
 using TurnosMedicos.Models;
@@ -28,11 +29,16 @@ public class TurnosController : ControllerBase
 
     private readonly AppDbContext _context;
     private readonly INoShowPenaltyEvaluator _noShowPenaltyEvaluator;
+    private readonly NoShowPenaltySettings _noShowPenaltySettings;
 
-    public TurnosController(AppDbContext context, INoShowPenaltyEvaluator noShowPenaltyEvaluator)
+    public TurnosController(
+        AppDbContext context,
+        INoShowPenaltyEvaluator noShowPenaltyEvaluator,
+        IOptions<NoShowPenaltySettings> noShowPenaltySettings)
     {
         _context = context;
         _noShowPenaltyEvaluator = noShowPenaltyEvaluator;
+        _noShowPenaltySettings = NoShowPenaltySettings.WithDefaults(noShowPenaltySettings.Value);
     }
 
     [HttpGet]
@@ -63,8 +69,7 @@ public class TurnosController : ControllerBase
         if (paciente == null)
             return NotFound(new { mensaje = "Paciente no encontrado." });
 
-        var noShowSettings = NoShowPenaltySettings.WithDefaults();
-        var bloqueado = await TryAutoUnlockAndCheckActiveBlockAsync(paciente, noShowSettings);
+        var bloqueado = await TryAutoUnlockAndCheckActiveBlockAsync(paciente);
         if (bloqueado)
             return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
 
@@ -87,13 +92,13 @@ public class TurnosController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
     }
 
-    private async Task<bool> TryAutoUnlockAndCheckActiveBlockAsync(Paciente paciente, NoShowPenaltySettings settings)
+    private async Task<bool> TryAutoUnlockAndCheckActiveBlockAsync(Paciente paciente)
     {
         if (!paciente.FechaBloqueo.HasValue)
             return false;
 
         var ahora = DateTime.Now;
-        var bloqueoVence = paciente.FechaBloqueo.Value.AddDays(settings.BloqueoDias!.Value);
+        var bloqueoVence = paciente.FechaBloqueo.Value.AddDays(_noShowPenaltySettings.BloqueoDias!.Value);
         if (bloqueoVence > ahora)
             return true;
 
