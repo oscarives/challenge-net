@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Logging;
 using TurnosMedicos.Data;
 using TurnosMedicos.Services;
 
@@ -33,36 +34,53 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+const string LegacyBaselineMigrationId = "20260519144134_InitialSchemaNoShow";
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("StartupMigrations");
     var historyRepository = db.GetService<IHistoryRepository>();
-    var dbConnection = db.Database.GetDbConnection();
-    dbConnection.Open();
+    var migrations = db.Database.GetMigrations().ToList();
 
-    var hasLegacySchema =
-        TableExists(dbConnection, "Pacientes") &&
-        TableExists(dbConnection, "Turnos") &&
-        TableExists(dbConnection, "Medicos") &&
-        TableExists(dbConnection, "Sucursales");
+    if (!migrations.Contains(LegacyBaselineMigrationId))
+        throw new InvalidOperationException($"No se encontró la migración baseline requerida: {LegacyBaselineMigrationId}.");
 
-    if (hasLegacySchema && !historyRepository.Exists())
+    if (historyRepository.Exists())
     {
-        db.Database.ExecuteSqlRaw(historyRepository.GetCreateScript());
-        var efVersion = typeof(DbContext).Assembly.GetName().Version?.ToString() ?? "9.0.0";
+        db.Database.Migrate();
+    }
+    else
+    {
+        var dbConnection = db.Database.GetDbConnection();
+        dbConnection.Open();
 
-        foreach (var migrationId in db.Database.GetMigrations())
+        var hasLegacySchema =
+            TableExists(dbConnection, "Pacientes") &&
+            TableExists(dbConnection, "Turnos") &&
+            TableExists(dbConnection, "Medicos") &&
+            TableExists(dbConnection, "Sucursales");
+
+        if (!hasLegacySchema)
         {
-            db.Database.ExecuteSqlRaw(
-                "INSERT OR IGNORE INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1});",
-                migrationId,
-                efVersion);
+            logger.LogInformation("Base sin esquema legado detectada. Se aplica flujo normal de migraciones.");
+            dbConnection.Close();
+            db.Database.Migrate();
+        }
+        else if (IsLegacySchemaCompatible(dbConnection))
+        {
+            logger.LogWarning("Esquema legado compatible detectado sin historial EF. Se registrará baseline y se continuarán migraciones.");
+            RegisterLegacyBaselineHistory(db, historyRepository, LegacyBaselineMigrationId);
+            dbConnection.Close();
+            db.Database.Migrate();
+        }
+        else
+        {
+            dbConnection.Close();
+            logger.LogError("Esquema legado inconsistente detectado. Se aborta arranque para evitar drift de migraciones.");
+            throw new InvalidOperationException("Esquema legado inconsistente: no es seguro registrar baseline automáticamente. Revise columnas/tablas requeridas por baseline.");
         }
     }
-
-    db.Database.Migrate();
-    dbConnection.Close();
 }
 
 app.UseSwagger();
@@ -83,4 +101,38 @@ static bool TableExists(System.Data.Common.DbConnection connection, string table
 
     var result = cmd.ExecuteScalar();
     return Convert.ToInt32(result) > 0;
+}
+
+static bool TableHasColumns(System.Data.Common.DbConnection connection, string tableName, params string[] columns)
+{
+    var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    using var cmd = connection.CreateCommand();
+    cmd.CommandText = $"PRAGMA table_info(\"{tableName}\");";
+    using var reader = cmd.ExecuteReader();
+    while (reader.Read())
+    {
+        existing.Add(reader.GetString(1));
+    }
+
+    return columns.All(existing.Contains);
+}
+
+static bool IsLegacySchemaCompatible(System.Data.Common.DbConnection connection)
+{
+    return
+        TableHasColumns(connection, "Pacientes", "Id", "NombreCompleto", "DNI", "Email", "Telefono", "FechaBloqueo", "createdAt", "isActive", "Bloqueado", "NoShowCount") &&
+        TableHasColumns(connection, "Turnos", "Id", "PacienteId", "MedicoId", "FechaHora", "Estado", "FechaCreacion", "Motivo", "AusenciaPenalizada") &&
+        TableHasColumns(connection, "Medicos", "Id", "NombreCompleto", "Especialidad", "SucursalId") &&
+        TableHasColumns(connection, "Sucursales", "Id", "Nombre", "Direccion");
+}
+
+static void RegisterLegacyBaselineHistory(AppDbContext db, IHistoryRepository historyRepository, string baselineMigrationId)
+{
+    db.Database.ExecuteSqlRaw(historyRepository.GetCreateScript());
+    var efVersion = typeof(DbContext).Assembly.GetName().Version?.ToString() ?? "9.0.0";
+
+    db.Database.ExecuteSqlRaw(
+        "INSERT OR IGNORE INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1});",
+        baselineMigrationId,
+        efVersion);
 }
