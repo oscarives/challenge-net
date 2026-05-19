@@ -24,6 +24,7 @@ export const turnosApi = {
   getAll:           ()          => axios.get(`${BASE_URL}/Turnos`),
   getById:          (id)        => axios.get(`${BASE_URL}/Turnos/${id}`),
   create:           (data)      => axios.post(`${BASE_URL}/Turnos`, data),
+  atender:          (id)        => axios.put(`${BASE_URL}/Turnos/${id}/atender`),
   cancelar:         (id)        => axios.put(`${BASE_URL}/Turnos/${id}/cancelar`),
   marcarAusencia:   (id)        => axios.post(`${BASE_URL}/Turnos/${id}/ausencia`),
   actualizarEstado: (id, data)  => axios.put(`${BASE_URL}/Turnos/${id}/estado`, data)
