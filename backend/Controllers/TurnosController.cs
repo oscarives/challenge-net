@@ -23,8 +23,8 @@ public class TurnosController : ControllerBase
 
     private static readonly Dictionary<EstadoTurno, HashSet<EstadoTurno>> AllowedStateTransitions = new()
     {
-        [EstadoTurno.Pendiente] = new() { EstadoTurno.Confirmado, EstadoTurno.Atendido },
-        [EstadoTurno.Confirmado] = new() { EstadoTurno.Atendido },
+        [EstadoTurno.Pendiente] = new() { EstadoTurno.Confirmado },
+        [EstadoTurno.Confirmado] = new(),
         [EstadoTurno.Atendido] = new(),
         [EstadoTurno.Cancelado] = new(),
         [EstadoTurno.NoShow] = new()
