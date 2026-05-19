@@ -11,6 +11,21 @@ namespace TurnosMedicos.Controllers;
 [Route("[controller]")]
 public class TurnosController : ControllerBase
 {
+    private static readonly HashSet<EstadoTurno> SensitiveStates = new()
+    {
+        EstadoTurno.Cancelado,
+        EstadoTurno.NoShow
+    };
+
+    private static readonly Dictionary<EstadoTurno, HashSet<EstadoTurno>> AllowedStateTransitions = new()
+    {
+        [EstadoTurno.Pendiente] = new() { EstadoTurno.Confirmado, EstadoTurno.Atendido },
+        [EstadoTurno.Confirmado] = new() { EstadoTurno.Atendido },
+        [EstadoTurno.Atendido] = new(),
+        [EstadoTurno.Cancelado] = new(),
+        [EstadoTurno.NoShow] = new()
+    };
+
     private readonly AppDbContext _context;
     private readonly INoShowPenaltyEvaluator _noShowPenaltyEvaluator;
 
@@ -140,6 +155,16 @@ public class TurnosController : ControllerBase
     {
         var turno = await _context.Turnos.FindAsync(id);
         if (turno == null) return NotFound();
+
+        if (turno.Estado == request.Estado)
+            return BadRequest(new { mensaje = "El turno ya se encuentra en el estado solicitado." });
+
+        if (SensitiveStates.Contains(request.Estado))
+            return BadRequest(new { mensaje = "No se permite actualizar a ese estado por este endpoint. Use los endpoints de negocio específicos." });
+
+        if (!AllowedStateTransitions.TryGetValue(turno.Estado, out var allowedStates) ||
+            !allowedStates.Contains(request.Estado))
+            return BadRequest(new { mensaje = $"Transición inválida desde {turno.Estado} hacia {request.Estado}." });
 
         turno.Estado = request.Estado;
         await _context.SaveChangesAsync();
