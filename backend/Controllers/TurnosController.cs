@@ -64,9 +64,15 @@ public class TurnosController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> CrearTurno([FromBody] Turno turno)
+    public async Task<IActionResult> CrearTurno([FromBody] CrearTurnoRequest request)
     {
-        turno.FechaHora = turno.FechaHora.ToUtcNormalized();
+        var turno = new Turno
+        {
+            PacienteId = request.PacienteId,
+            MedicoId = request.MedicoId,
+            FechaHora = request.FechaHora.ToUtcNormalized(),
+            Motivo = request.Motivo
+        };
 
         var paciente = await _context.Pacientes.FindAsync(turno.PacienteId);
         if (paciente == null)
@@ -209,4 +215,12 @@ public class TurnosController : ControllerBase
 public class ActualizarEstadoRequest
 {
     public EstadoTurno Estado { get; set; }
+}
+
+public class CrearTurnoRequest
+{
+    public int? PacienteId { get; set; }
+    public int MedicoId { get; set; }
+    public DateTime FechaHora { get; set; }
+    public string Motivo { get; set; } = string.Empty;
 }
