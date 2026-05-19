@@ -271,6 +271,61 @@ public class TurnosControllerTests
         Assert.True(created.FechaCreacion > DateTime.UtcNow.AddMinutes(-1));
     }
 
+    [Fact]
+    public async Task CrearTurno_ReturnsBadRequest_WhenBusinessInputIsInvalid()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        await using var context = new AppDbContext(options);
+        context.Medicos.Add(new Medico { Id = 7201, NombreCompleto = "Dr Validacion", Especialidad = "Clinica", SucursalId = 1 });
+        context.Pacientes.Add(new Paciente
+        {
+            Id = 7202,
+            NombreCompleto = "Paciente Validacion",
+            DNI = "7202",
+            Email = "val@x.com",
+            Telefono = "7202",
+            createdAt = DateTime.UtcNow,
+            isActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var controller = new TurnosController(
+            context,
+            new NoOpNoShowPenaltyEvaluator(),
+            Options.Create(new NoShowPenaltySettings { MedidaPeriodo = "Mes", Periodo = 1, BloqueoDias = 30 }));
+
+        var invalidPastDate = await controller.CrearTurno(new CrearTurnoRequest
+        {
+            PacienteId = 7202,
+            MedicoId = 7201,
+            FechaHora = DateTime.UtcNow.AddMinutes(-10),
+            Motivo = "control"
+        });
+        Assert.IsType<BadRequestObjectResult>(invalidPastDate);
+
+        var invalidIds = await controller.CrearTurno(new CrearTurnoRequest
+        {
+            PacienteId = 0,
+            MedicoId = 0,
+            FechaHora = DateTime.UtcNow.AddHours(2),
+            Motivo = "control"
+        });
+        Assert.IsType<BadRequestObjectResult>(invalidIds);
+
+        var invalidMotivo = await controller.CrearTurno(new CrearTurnoRequest
+        {
+            PacienteId = 7202,
+            MedicoId = 7201,
+            FechaHora = DateTime.UtcNow.AddHours(2),
+            Motivo = "  "
+        });
+        Assert.IsType<BadRequestObjectResult>(invalidMotivo);
+    }
+
     private static string GetMensaje(object? value)
     {
         if (value == null)

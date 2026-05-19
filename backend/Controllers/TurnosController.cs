@@ -12,6 +12,8 @@ namespace TurnosMedicos.Controllers;
 [Route("[controller]")]
 public class TurnosController : ControllerBase
 {
+    private const int MinMotivoLength = 3;
+    private const int MaxMotivoLength = 200;
     private static readonly HashSet<EstadoTurno> SensitiveStates = new()
     {
         EstadoTurno.Cancelado,
@@ -66,12 +68,16 @@ public class TurnosController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CrearTurno([FromBody] CrearTurnoRequest request)
     {
+        var validationError = ValidateCrearTurnoRequest(request);
+        if (validationError != null)
+            return BadRequest(new { mensaje = validationError });
+
         var turno = new Turno
         {
             PacienteId = request.PacienteId,
             MedicoId = request.MedicoId,
             FechaHora = request.FechaHora.ToUtcNormalized(),
-            Motivo = request.Motivo
+            Motivo = request.Motivo.Trim()
         };
 
         var paciente = await _context.Pacientes.FindAsync(turno.PacienteId);
@@ -99,6 +105,27 @@ public class TurnosController : ControllerBase
         _context.Turnos.Add(turno);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
+    }
+
+    private string? ValidateCrearTurnoRequest(CrearTurnoRequest request)
+    {
+        if (!request.PacienteId.HasValue || request.PacienteId.Value <= 0)
+            return "El paciente es obligatorio y debe ser mayor a cero.";
+
+        if (request.MedicoId <= 0)
+            return "El médico es obligatorio y debe ser mayor a cero.";
+
+        var motivo = request.Motivo?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(motivo))
+            return "El motivo es obligatorio.";
+
+        if (motivo.Length < MinMotivoLength || motivo.Length > MaxMotivoLength)
+            return $"El motivo debe tener entre {MinMotivoLength} y {MaxMotivoLength} caracteres.";
+
+        if (request.FechaHora.ToUtcNormalized() <= DateTime.UtcNow)
+            return "La fecha y hora del turno debe ser futura.";
+
+        return null;
     }
 
     private async Task<bool> TryAutoUnlockAndCheckActiveBlockAsync(Paciente paciente)
