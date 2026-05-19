@@ -48,8 +48,18 @@ public class TurnosController : ControllerBase
         if (paciente == null)
             return NotFound(new { mensaje = "Paciente no encontrado." });
 
-        if (paciente.Bloqueado)
-            return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
+        var noShowSettings = NoShowPenaltySettings.WithDefaults();
+        var ahora = DateTime.Now;
+        if (paciente.FechaBloqueo.HasValue)
+        {
+            var bloqueoVence = paciente.FechaBloqueo.Value.AddDays(noShowSettings.BloqueoDias!.Value);
+            if (bloqueoVence > ahora)
+                return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
+
+            paciente.FechaBloqueo = null;
+            paciente.Bloqueado = false;
+            await _context.SaveChangesAsync();
+        }
 
         var medicoExiste = await _context.Medicos.AnyAsync(m => m.Id == turno.MedicoId);
         if (!medicoExiste)
@@ -64,6 +74,7 @@ public class TurnosController : ControllerBase
 
         turno.FechaCreacion = DateTime.UtcNow;
         turno.Estado = EstadoTurno.Pendiente;
+        turno.AusenciaPenalizada = false;
         _context.Turnos.Add(turno);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
@@ -84,7 +95,9 @@ public class TurnosController : ControllerBase
         if (turno.FechaHora - DateTime.Now < TimeSpan.FromHours(24))
         {
             turno.Estado = EstadoTurno.NoShow;
+            turno.AusenciaPenalizada = false;
             await _context.SaveChangesAsync();
+            await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
             return Ok(new { mensaje = "Cancelación tardía: el turno fue marcado como ausencia.", turno });
         }
 
@@ -109,6 +122,7 @@ public class TurnosController : ControllerBase
             return BadRequest(new { mensaje = "La ausencia solo puede registrarse dentro de las 24 horas del turno." });
 
         turno.Estado = EstadoTurno.NoShow;
+        turno.AusenciaPenalizada = false;
         await _context.SaveChangesAsync();
         await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
         return Ok(turno);
