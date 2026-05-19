@@ -108,6 +108,15 @@ public class TurnosController : ControllerBase
         return false;
     }
 
+    private async Task<Turno> ApplyNoShowAsync(Turno turno)
+    {
+        turno.Estado = EstadoTurno.NoShow;
+        turno.AusenciaPenalizada = false;
+        await _context.SaveChangesAsync();
+        await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
+        return turno;
+    }
+
     [HttpPut("{id}/cancelar")]
     public async Task<IActionResult> CancelarTurno(int id)
     {
@@ -125,10 +134,7 @@ public class TurnosController : ControllerBase
 
         if (turno.FechaHora.IsWithinCancellationWindow())
         {
-            turno.Estado = EstadoTurno.NoShow;
-            turno.AusenciaPenalizada = false;
-            await _context.SaveChangesAsync();
-            await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
+            await ApplyNoShowAsync(turno);
             return Ok(new { mensaje = "Cancelación tardía: el turno fue marcado como ausencia.", turno });
         }
 
@@ -152,10 +158,7 @@ public class TurnosController : ControllerBase
         if (!turno.FechaHora.IsWithinCancellationWindow())
             return BadRequest(new { mensaje = "La ausencia solo puede registrarse dentro de las 24 horas del turno." });
 
-        turno.Estado = EstadoTurno.NoShow;
-        turno.AusenciaPenalizada = false;
-        await _context.SaveChangesAsync();
-        await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
+        await ApplyNoShowAsync(turno);
         return Ok(turno);
     }
 
