@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using TurnosMedicos.Data;
+using TurnosMedicos.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite("Data Source=turnos.db"));
+builder.Services.AddScoped<INoShowPenaltyEvaluator, NoOpNoShowPenaltyEvaluator>();
 
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
