@@ -15,7 +15,8 @@ public class TurnosController : ControllerBase
     private static readonly HashSet<EstadoTurno> SensitiveStates = new()
     {
         EstadoTurno.Cancelado,
-        EstadoTurno.NoShow
+        EstadoTurno.NoShow,
+        EstadoTurno.Atendido
     };
 
     private static readonly Dictionary<EstadoTurno, HashSet<EstadoTurno>> AllowedStateTransitions = new()
