@@ -2,9 +2,20 @@ namespace TurnosMedicos.Helpers;
 
 public static class DateTimeExtensions
 {
+    private static DateTime NormalizeToUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Local).ToUniversalTime()
+        };
+    }
+
     public static double HoursUntil(this DateTime fechaTurno)
     {
-        return (fechaTurno - DateTime.Now).TotalHours;
+        var turnoUtc = NormalizeToUtc(fechaTurno);
+        return (turnoUtc - DateTime.UtcNow).TotalHours;
     }
 
     public static bool IsWithinCancellationWindow(this DateTime fechaTurno)

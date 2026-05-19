@@ -25,7 +25,7 @@ public class NoShowPenaltyEvaluator : INoShowPenaltyEvaluator
         if (paciente == null)
             return;
 
-        var now = DateTime.Now;
+        var now = DateTime.UtcNow;
         var start = string.Equals(_settings.MedidaPeriodo, "Dia", StringComparison.OrdinalIgnoreCase)
             ? now.AddDays(-_settings.Periodo!.Value)
             : now.AddMonths(-_settings.Periodo!.Value);
