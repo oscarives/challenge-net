@@ -98,7 +98,7 @@ public class TurnosController : ControllerBase
         if (!paciente.FechaBloqueo.HasValue)
             return false;
 
-        var ahora = DateTime.Now;
+        var ahora = DateTime.UtcNow;
         var bloqueoVence = paciente.FechaBloqueo.Value.AddDays(_noShowPenaltySettings.BloqueoDias!.Value);
         if (bloqueoVence > ahora)
             return true;
