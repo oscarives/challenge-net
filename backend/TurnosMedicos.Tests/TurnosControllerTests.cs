@@ -78,7 +78,7 @@ public class TurnosControllerTests
             new NoOpNoShowPenaltyEvaluator(),
             Options.Create(new NoShowPenaltySettings { MedidaPeriodo = "Mes", Periodo = 1, BloqueoDias = 0 }));
 
-        var result = await controller.CrearTurno(new Turno
+        var result = await controller.CrearTurno(new CrearTurnoRequest
         {
             PacienteId = 4002,
             MedicoId = 4001,
@@ -215,7 +215,7 @@ public class TurnosControllerTests
             new NoOpNoShowPenaltyEvaluator(),
             Options.Create(new NoShowPenaltySettings { MedidaPeriodo = "Mes", Periodo = 1, BloqueoDias = 30 }));
 
-        var result = await controller.CrearTurno(new Turno
+        var result = await controller.CrearTurno(new CrearTurnoRequest
         {
             PacienteId = 7002,
             MedicoId = 7001,
@@ -226,6 +226,49 @@ public class TurnosControllerTests
         Assert.IsType<CreatedAtActionResult>(result);
         var created = await context.Turnos.OrderByDescending(t => t.Id).FirstAsync();
         Assert.Equal(DateTimeKind.Utc, created.FechaHora.Kind);
+    }
+
+    [Fact]
+    public async Task CrearTurno_SetsDomainFieldsOnServer()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        await using var context = new AppDbContext(options);
+        context.Medicos.Add(new Medico { Id = 7101, NombreCompleto = "Dr Domain", Especialidad = "Clinica", SucursalId = 1 });
+        context.Pacientes.Add(new Paciente
+        {
+            Id = 7102,
+            NombreCompleto = "Paciente Domain",
+            DNI = "7102",
+            Email = "domain@x.com",
+            Telefono = "7102",
+            createdAt = DateTime.UtcNow,
+            isActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var controller = new TurnosController(
+            context,
+            new NoOpNoShowPenaltyEvaluator(),
+            Options.Create(new NoShowPenaltySettings { MedidaPeriodo = "Mes", Periodo = 1, BloqueoDias = 30 }));
+
+        var result = await controller.CrearTurno(new CrearTurnoRequest
+        {
+            PacienteId = 7102,
+            MedicoId = 7101,
+            FechaHora = DateTime.UtcNow.AddHours(4),
+            Motivo = "domain-fields"
+        });
+
+        Assert.IsType<CreatedAtActionResult>(result);
+
+        var created = await context.Turnos.OrderByDescending(t => t.Id).FirstAsync();
+        Assert.Equal(EstadoTurno.Pendiente, created.Estado);
+        Assert.False(created.AusenciaPenalizada);
+        Assert.True(created.FechaCreacion > DateTime.UtcNow.AddMinutes(-1));
     }
 
     private static string GetMensaje(object? value)
