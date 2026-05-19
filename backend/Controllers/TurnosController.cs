@@ -79,7 +79,11 @@ public class TurnosController : ControllerBase
             return BadRequest(new { mensaje = "Solo se pueden cancelar turnos en estado Pendiente o Confirmado." });
 
         if (turno.FechaHora - DateTime.Now < TimeSpan.FromHours(24))
-            return BadRequest(new { mensaje = "No se puede cancelar con menos de 24 horas de anticipación." });
+        {
+            turno.Estado = EstadoTurno.NoShow;
+            await _context.SaveChangesAsync();
+            return Ok(new { mensaje = "Cancelación tardía: el turno fue marcado como ausencia.", turno });
+        }
 
         turno.Estado = EstadoTurno.Cancelado;
         await _context.SaveChangesAsync();
