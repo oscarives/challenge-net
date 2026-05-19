@@ -49,17 +49,9 @@ public class TurnosController : ControllerBase
             return NotFound(new { mensaje = "Paciente no encontrado." });
 
         var noShowSettings = NoShowPenaltySettings.WithDefaults();
-        var ahora = DateTime.Now;
-        if (paciente.FechaBloqueo.HasValue)
-        {
-            var bloqueoVence = paciente.FechaBloqueo.Value.AddDays(noShowSettings.BloqueoDias!.Value);
-            if (bloqueoVence > ahora)
-                return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
-
-            paciente.FechaBloqueo = null;
-            paciente.Bloqueado = false;
-            await _context.SaveChangesAsync();
-        }
+        var bloqueado = await TryAutoUnlockAndCheckActiveBlockAsync(paciente, noShowSettings);
+        if (bloqueado)
+            return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
 
         var medicoExiste = await _context.Medicos.AnyAsync(m => m.Id == turno.MedicoId);
         if (!medicoExiste)
@@ -78,6 +70,21 @@ public class TurnosController : ControllerBase
         _context.Turnos.Add(turno);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
+    }
+
+    private async Task<bool> TryAutoUnlockAndCheckActiveBlockAsync(Paciente paciente, NoShowPenaltySettings settings)
+    {
+        if (!paciente.FechaBloqueo.HasValue)
+            return false;
+
+        var ahora = DateTime.Now;
+        var bloqueoVence = paciente.FechaBloqueo.Value.AddDays(settings.BloqueoDias!.Value);
+        if (bloqueoVence > ahora)
+            return true;
+
+        paciente.FechaBloqueo = null;
+        await _context.SaveChangesAsync();
+        return false;
     }
 
     [HttpPut("{id}/cancelar")]
