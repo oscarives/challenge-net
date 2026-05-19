@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TurnosMedicos.Data;
 using TurnosMedicos.Helpers;
 using TurnosMedicos.Models;
+using TurnosMedicos.Services;
 
 namespace TurnosMedicos.Controllers;
 
@@ -11,10 +12,12 @@ namespace TurnosMedicos.Controllers;
 public class TurnosController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly INoShowPenaltyEvaluator _noShowPenaltyEvaluator;
 
-    public TurnosController(AppDbContext context)
+    public TurnosController(AppDbContext context, INoShowPenaltyEvaluator noShowPenaltyEvaluator)
     {
         _context = context;
+        _noShowPenaltyEvaluator = noShowPenaltyEvaluator;
     }
 
     [HttpGet]
@@ -96,11 +99,18 @@ public class TurnosController : ControllerBase
         var turno = await _context.Turnos.FindAsync(id);
         if (turno == null) return NotFound();
 
+        if (turno.Estado == EstadoTurno.NoShow)
+            return BadRequest(new { mensaje = "El turno ya se encuentra marcado como ausencia." });
+
+        if (turno.Estado == EstadoTurno.Atendido || turno.Estado == EstadoTurno.Cancelado)
+            return BadRequest(new { mensaje = "Solo se puede marcar ausencia para turnos en estado Pendiente o Confirmado." });
+
         if (!turno.FechaHora.IsWithinCancellationWindow())
             return BadRequest(new { mensaje = "La ausencia solo puede registrarse dentro de las 24 horas del turno." });
 
         turno.Estado = EstadoTurno.NoShow;
         await _context.SaveChangesAsync();
+        await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
         return Ok(turno);
     }
 
