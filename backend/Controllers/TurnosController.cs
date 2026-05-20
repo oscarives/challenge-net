@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TurnosMedicos.Data;
 using TurnosMedicos.Helpers;
 using TurnosMedicos.Models;
@@ -11,13 +12,36 @@ namespace TurnosMedicos.Controllers;
 [Route("[controller]")]
 public class TurnosController : ControllerBase
 {
+    private const int MinMotivoLength = 3;
+    private const int MaxMotivoLength = 200;
+    private static readonly HashSet<EstadoTurno> SensitiveStates = new()
+    {
+        EstadoTurno.Cancelado,
+        EstadoTurno.NoShow,
+        EstadoTurno.Atendido
+    };
+
+    private static readonly Dictionary<EstadoTurno, HashSet<EstadoTurno>> AllowedStateTransitions = new()
+    {
+        [EstadoTurno.Pendiente] = new() { EstadoTurno.Confirmado },
+        [EstadoTurno.Confirmado] = new(),
+        [EstadoTurno.Atendido] = new(),
+        [EstadoTurno.Cancelado] = new(),
+        [EstadoTurno.NoShow] = new()
+    };
+
     private readonly AppDbContext _context;
     private readonly INoShowPenaltyEvaluator _noShowPenaltyEvaluator;
+    private readonly NoShowPenaltySettings _noShowPenaltySettings;
 
-    public TurnosController(AppDbContext context, INoShowPenaltyEvaluator noShowPenaltyEvaluator)
+    public TurnosController(
+        AppDbContext context,
+        INoShowPenaltyEvaluator noShowPenaltyEvaluator,
+        IOptions<NoShowPenaltySettings> noShowPenaltySettings)
     {
         _context = context;
         _noShowPenaltyEvaluator = noShowPenaltyEvaluator;
+        _noShowPenaltySettings = NoShowPenaltySettings.WithDefaults(noShowPenaltySettings.Value);
     }
 
     [HttpGet]
@@ -42,14 +66,25 @@ public class TurnosController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> CrearTurno([FromBody] Turno turno)
+    public async Task<IActionResult> CrearTurno([FromBody] CrearTurnoRequest request)
     {
+        var validationError = ValidateCrearTurnoRequest(request);
+        if (validationError != null)
+            return BadRequest(new { mensaje = validationError });
+
+        var turno = new Turno
+        {
+            PacienteId = request.PacienteId,
+            MedicoId = request.MedicoId,
+            FechaHora = request.FechaHora.ToUtcNormalized(),
+            Motivo = request.Motivo.Trim()
+        };
+
         var paciente = await _context.Pacientes.FindAsync(turno.PacienteId);
         if (paciente == null)
             return NotFound(new { mensaje = "Paciente no encontrado." });
 
-        var noShowSettings = NoShowPenaltySettings.WithDefaults();
-        var bloqueado = await TryAutoUnlockAndCheckActiveBlockAsync(paciente, noShowSettings);
+        var bloqueado = await TryAutoUnlockAndCheckActiveBlockAsync(paciente);
         if (bloqueado)
             return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
 
@@ -72,19 +107,49 @@ public class TurnosController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
     }
 
-    private async Task<bool> TryAutoUnlockAndCheckActiveBlockAsync(Paciente paciente, NoShowPenaltySettings settings)
+    private string? ValidateCrearTurnoRequest(CrearTurnoRequest request)
+    {
+        if (!request.PacienteId.HasValue || request.PacienteId.Value <= 0)
+            return "El paciente es obligatorio y debe ser mayor a cero.";
+
+        if (request.MedicoId <= 0)
+            return "El médico es obligatorio y debe ser mayor a cero.";
+
+        var motivo = request.Motivo?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(motivo))
+            return "El motivo es obligatorio.";
+
+        if (motivo.Length < MinMotivoLength || motivo.Length > MaxMotivoLength)
+            return $"El motivo debe tener entre {MinMotivoLength} y {MaxMotivoLength} caracteres.";
+
+        if (request.FechaHora.ToUtcNormalized() <= DateTime.UtcNow)
+            return "La fecha y hora del turno debe ser futura.";
+
+        return null;
+    }
+
+    private async Task<bool> TryAutoUnlockAndCheckActiveBlockAsync(Paciente paciente)
     {
         if (!paciente.FechaBloqueo.HasValue)
             return false;
 
-        var ahora = DateTime.Now;
-        var bloqueoVence = paciente.FechaBloqueo.Value.AddDays(settings.BloqueoDias!.Value);
+        var ahora = DateTime.UtcNow;
+        var bloqueoVence = paciente.FechaBloqueo.Value.AddDays(_noShowPenaltySettings.BloqueoDias!.Value);
         if (bloqueoVence > ahora)
             return true;
 
         paciente.FechaBloqueo = null;
         await _context.SaveChangesAsync();
         return false;
+    }
+
+    private async Task<Turno> ApplyNoShowAsync(Turno turno)
+    {
+        turno.Estado = EstadoTurno.NoShow;
+        turno.AusenciaPenalizada = false;
+        await _context.SaveChangesAsync();
+        await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
+        return turno;
     }
 
     [HttpPut("{id}/cancelar")]
@@ -99,12 +164,12 @@ public class TurnosController : ControllerBase
         if (turno.Estado == EstadoTurno.Atendido || turno.Estado == EstadoTurno.NoShow)
             return BadRequest(new { mensaje = "Solo se pueden cancelar turnos en estado Pendiente o Confirmado." });
 
-        if (turno.FechaHora - DateTime.Now < TimeSpan.FromHours(24))
+        if (turno.FechaHora.IsExpired())
+            return BadRequest(new { mensaje = "No se puede cancelar un turno ya vencido." });
+
+        if (turno.FechaHora.IsWithinCancellationWindow())
         {
-            turno.Estado = EstadoTurno.NoShow;
-            turno.AusenciaPenalizada = false;
-            await _context.SaveChangesAsync();
-            await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
+            await ApplyNoShowAsync(turno);
             return Ok(new { mensaje = "Cancelación tardía: el turno fue marcado como ausencia.", turno });
         }
 
@@ -128,10 +193,27 @@ public class TurnosController : ControllerBase
         if (!turno.FechaHora.IsWithinCancellationWindow())
             return BadRequest(new { mensaje = "La ausencia solo puede registrarse dentro de las 24 horas del turno." });
 
-        turno.Estado = EstadoTurno.NoShow;
-        turno.AusenciaPenalizada = false;
+        await ApplyNoShowAsync(turno);
+        return Ok(turno);
+    }
+
+    [HttpPut("{id}/atender")]
+    public async Task<IActionResult> MarcarAtendido(int id)
+    {
+        var turno = await _context.Turnos.FindAsync(id);
+        if (turno == null) return NotFound();
+
+        if (turno.Estado == EstadoTurno.Atendido)
+            return BadRequest(new { mensaje = "El turno ya se encuentra atendido." });
+
+        if (turno.Estado == EstadoTurno.Cancelado || turno.Estado == EstadoTurno.NoShow)
+            return BadRequest(new { mensaje = "No se puede marcar como atendido un turno cancelado o con ausencia." });
+
+        if (turno.Estado != EstadoTurno.Pendiente && turno.Estado != EstadoTurno.Confirmado)
+            return BadRequest(new { mensaje = "Solo se pueden atender turnos en estado Pendiente o Confirmado." });
+
+        turno.Estado = EstadoTurno.Atendido;
         await _context.SaveChangesAsync();
-        await _noShowPenaltyEvaluator.EvaluateAndApplyAsync(turno.PacienteId);
         return Ok(turno);
     }
 
@@ -140,6 +222,16 @@ public class TurnosController : ControllerBase
     {
         var turno = await _context.Turnos.FindAsync(id);
         if (turno == null) return NotFound();
+
+        if (turno.Estado == request.Estado)
+            return BadRequest(new { mensaje = "El turno ya se encuentra en el estado solicitado." });
+
+        if (SensitiveStates.Contains(request.Estado))
+            return BadRequest(new { mensaje = "No se permite actualizar a ese estado por este endpoint. Use los endpoints de negocio específicos." });
+
+        if (!AllowedStateTransitions.TryGetValue(turno.Estado, out var allowedStates) ||
+            !allowedStates.Contains(request.Estado))
+            return BadRequest(new { mensaje = $"Transición inválida desde {turno.Estado} hacia {request.Estado}." });
 
         turno.Estado = request.Estado;
         await _context.SaveChangesAsync();
@@ -150,4 +242,12 @@ public class TurnosController : ControllerBase
 public class ActualizarEstadoRequest
 {
     public EstadoTurno Estado { get; set; }
+}
+
+public class CrearTurnoRequest
+{
+    public int? PacienteId { get; set; }
+    public int MedicoId { get; set; }
+    public DateTime FechaHora { get; set; }
+    public string Motivo { get; set; } = string.Empty;
 }

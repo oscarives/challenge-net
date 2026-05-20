@@ -9,7 +9,6 @@
           <th>DNI</th>
           <th>Email</th>
           <th>Teléfono</th>
-          <th>No-shows</th>
           <th>Bloqueado</th>
           <th>Acciones</th>
         </tr>
@@ -21,9 +20,8 @@
           <td>{{ p.dni }}</td>
           <td>{{ p.email }}</td>
           <td>{{ p.telefono }}</td>
-          <td>{{ p.noShowCount }}</td>
           <td>
-            <span v-if="p.bloqueado" style="color: #d32f2f; font-weight: 600">Sí</span>
+            <span v-if="isBloqueado(p)" style="color: #d32f2f; font-weight: 600">Sí</span>
             <span v-else style="color: #388e3c">No</span>
           </td>
           <td>
@@ -37,7 +35,7 @@
 </template>
 
 <script>
-import { pacientesApi } from '../services/api'
+import { isPacienteBloqueadoByFecha, pacientesApi } from '../services/api'
 
 export default {
   name: 'PacientesList',
@@ -55,6 +53,9 @@ export default {
     }
   },
   methods: {
+    isBloqueado(paciente) {
+      return isPacienteBloqueadoByFecha(paciente)
+    },
     async eliminar(id) {
       try {
         await pacientesApi.delete(id)
