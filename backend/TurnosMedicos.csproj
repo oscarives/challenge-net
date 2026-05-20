@@ -13,4 +13,9 @@
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.8.1" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="TurnosMedicos.Tests\\**\\*.cs" />
+    <None Remove="TurnosMedicos.Tests\\**\\*" />
+    <Content Remove="TurnosMedicos.Tests\\**\\*" />
+  </ItemGroup>
 </Project>

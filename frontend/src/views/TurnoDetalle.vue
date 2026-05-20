@@ -13,15 +13,16 @@
 
       <div style="margin-top: 24px">
         <div class="form-group">
-          <label>Cambiar estado</label>
+          <label>Cambiar estado (endpoint genérico)</label>
           <select v-model="nuevoEstado">
-            <option v-for="e in estados" :key="e" :value="e">{{ e }}</option>
+            <option v-for="e in estadosDisponibles" :key="e" :value="e">{{ e }}</option>
           </select>
         </div>
         <button @click="cambiarEstado" style="margin-bottom: 16px">Actualizar estado</button>
       </div>
 
       <div style="display: flex; gap: 10px">
+        <button v-if="puedeAtender" @click="atender">Marcar atendido</button>
         <button class="btn-danger" @click="cancelar">Cancelar turno</button>
         <button @click="marcarAusencia">Marcar ausencia</button>
       </div>
@@ -38,8 +39,19 @@ export default {
   data() {
     return {
       turno: null,
-      nuevoEstado: 'Pendiente',
-      estados: ['Pendiente', 'Confirmado', 'Cancelado', 'Atendido', 'NoShow']
+      nuevoEstado: 'Pendiente'
+    }
+  },
+  computed: {
+    estadosDisponibles() {
+      if (!this.turno) return []
+
+      if (this.turno.estado === 'Pendiente') return ['Pendiente', 'Confirmado']
+      if (this.turno.estado === 'Confirmado') return ['Confirmado']
+      return [this.turno.estado]
+    },
+    puedeAtender() {
+      return this.turno && (this.turno.estado === 'Pendiente' || this.turno.estado === 'Confirmado')
     }
   },
   async mounted() {
@@ -64,6 +76,14 @@ export default {
         await this.cargarTurno()
       } catch (error) {
         alert(getApiErrorMessage(error))
+      }
+    },
+    async atender() {
+      try {
+        await turnosApi.atender(this.turno.id)
+        await this.cargarTurno()
+      } catch (error) {
+        alert(getApiErrorMessage(error, 'No se pudo marcar el turno como atendido.'))
       }
     },
     async cancelar() {
